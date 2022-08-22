@@ -1,7 +1,9 @@
 import os
+import sys
 import time
 
 import requests
+import telegram
 
 from telegram.ext import CommandHandler, Updater
 from dotenv import load_dotenv
@@ -39,8 +41,6 @@ def get_api_answer(current_timestamp):
     response = response.json()
     return response
 
-    ...
-
 
 def check_response(response):
     """
@@ -55,38 +55,62 @@ def check_response(response):
     if not (isinstance(response, dict)):
         # logger.error('Ответ сервера не является словарем!')
         raise TypeError('Ответ сервера не является словарем!')
+    print(homeworks[0])
     return homeworks
-
-    ...
 
 
 def parse_status(homework):
     """
     Извлекает из информации о конкретной домашней работе статус этой работы.
     """
-    homework_name = ...
-    homework_status = ...
+    homework_name = homework['homework_name']
+    homework_status = homework['status']
 
-    ...
-
-    verdict = ...
-
-    ...
+    verdict = HOMEWORK_STATUSES[homework_status]
+    print(f'Изменился статус проверки работы "{homework_name}". {verdict}')
 
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def check_tokens():
-    ...
+    """Проверяет доступность переменных окружения,
+    которые необходимы для работы программы.
+    """
+    check = False
+    keys = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
+    for key in keys:
+        if key in os.environ:
+            print('Ключ', key, ' есть!, и имеет значение', os.environ[key])
+            check = True
+        else:
+            print('Ключ', key, ' Отсутствует!')
+            check = False
+            break
+
+    print(check)
+    return check
 
 
 def main():
     """Основная логика работы бота."""
+    if not check_tokens():
+        print('error token!')
+        return False
 
-    ...
+    while True:
+        print('Работаем!')
+        time.sleep(3)
 
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = (int(time.time())) - MONTH_IN_SEC
+    #     bot = telegram.Bot(token=TELEGRAM_TOKEN)
+    #     current_timestamp = (int(time.time())) - MONTH_IN_SEC
+    #
+    #     response = get_api_answer(current_timestamp)
+    #     homeworks = check_response(response)
+    #     homework = homeworks[0]
+    #     message = parse_status(homework)
+    #     # send_message(bot, message)
+
+
 
     ...
 
@@ -98,6 +122,7 @@ def main():
 
             current_timestamp = ...
             time.sleep(RETRY_TIME)
+            ...
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
