@@ -1,11 +1,10 @@
 import os
-import sys
 import time
+import logging
 
 import requests
 import telegram
 
-from telegram.ext import CommandHandler, Updater
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,6 +26,17 @@ HOMEWORK_STATUSES = {
 }
 MONTH_IN_SEC = 2629743
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename='program.log',
+    filemode='w',
+    format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
+)
+logger = logging.getLogger(__name__)
+logger.addHandler(
+    logging.StreamHandler()
+)
+
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
@@ -37,9 +47,14 @@ def get_api_answer(current_timestamp):
     """Делает запрос к единственному эндпоинту API-сервиса."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    response = response.json()
-    return response
+    try:
+        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        if response.status_code != 200:
+            raise Exception('not 200')
+        return response.json()
+    except requests.exceptions.RequestException as request_error:
+        code_api_msg = f'Код ответа API (RequestException): {request_error}'
+        raise Exception(code_api_msg)
 
 
 def check_response(response):
@@ -76,18 +91,14 @@ def check_tokens():
     """Проверяет доступность переменных окружения,
     которые необходимы для работы программы.
     """
-    check = False
-    keys = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
-    for key in keys:
-        if key in os.environ:
-            print('Ключ', key, ' есть!, и имеет значение', os.environ[key])
-            check = True
-        else:
-            print('Ключ', key, ' Отсутствует!')
-            check = False
-            break
+    check = True
+    if PRACTICUM_TOKEN is None:
+        check = False
+    if TELEGRAM_TOKEN is None:
+        check = False
+    if TELEGRAM_CHAT_ID is None:
+        check = False
 
-    print(check)
     return check
 
 
@@ -98,35 +109,20 @@ def main():
         return False
 
     while True:
-        print('Работаем!')
-        time.sleep(3)
-
-    #     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    #     current_timestamp = (int(time.time())) - MONTH_IN_SEC
-    #
-    #     response = get_api_answer(current_timestamp)
-    #     homeworks = check_response(response)
-    #     homework = homeworks[0]
-    #     message = parse_status(homework)
-    #     # send_message(bot, message)
-
-
-
-    ...
-
-    while True:
         try:
-            response = ...
+            bot = telegram.Bot(token=TELEGRAM_TOKEN)
+            current_timestamp = (int(time.time())) - MONTH_IN_SEC
+            response = get_api_answer(current_timestamp)
+            homeworks = check_response(response)
+            homework = homeworks[0]
+            message = parse_status(homework)
+            send_message(bot, message)
 
-            ...
-
-            current_timestamp = ...
             time.sleep(RETRY_TIME)
-            ...
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            ...
+            print(message)
             time.sleep(RETRY_TIME)
         else:
             ...
