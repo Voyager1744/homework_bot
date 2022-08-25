@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import logging
 
@@ -9,7 +10,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -17,7 +17,6 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
-print(HEADERS)
 
 HOMEWORK_STATUSES = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
@@ -28,19 +27,50 @@ MONTH_IN_SEC = 2629743
 
 logging.basicConfig(
     level=logging.DEBUG,
-    filename='program.log',
+    stream=sys.stdout,
     filemode='w',
     format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
 )
 logger = logging.getLogger(__name__)
-logger.addHandler(
-    logging.StreamHandler()
-)
+fileHandler = logging.FileHandler('program_hw.log')
+streamHandler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+streamHandler.setFormatter(formatter)
+fileHandler.setFormatter(formatter)
+logger.addHandler(streamHandler)
+logger.addHandler(fileHandler)
+
+
+class ExceptionNot200Error(Exception):
+    """Запрос не вернул ответ с кодом 200."""
+    # logger.error("Answer ERROR not 200!")
+
+
+class ExceptionTelegram(Exception):
+    """Сообщение не отправилось в чат."""
+    # logger.error("Message not send!")
+
+
+class ExceptionResponseError(Exception):
+    """Ошибка отклика."""
+    # logger.error("Response ERROR!")
+
+
+class ExceptionTokenError(Exception):
+    """Ошибка передачи токена."""
+    # logger.critical("TOKEN error!")
 
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    try:
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+        return 'Сообщение отправлено телеграмм'
+    except telegram.TelegramError as telegram_error:
+        return f'Произошла ошибка {telegram_error}!'
+    except ExceptionTelegram:
+        return 'Сообщение не отправилось. Что-то пошло не так'
 
 
 def get_api_answer(current_timestamp):
@@ -50,7 +80,7 @@ def get_api_answer(current_timestamp):
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != 200:
-            raise Exception('not 200')
+            raise ExceptionNot200Error('Answer not 200')
         return response.json()
     except requests.exceptions.RequestException as request_error:
         code_api_msg = f'Код ответа API (RequestException): {request_error}'
@@ -67,10 +97,13 @@ def check_response(response):
     доступный в ответе API по ключу 'homeworks'.
     """
     homeworks = response['homeworks']
+    if response.get('homeworks') is None:
+        raise ExceptionResponseError('Response Error!')
     if not (isinstance(response, dict)):
         # logger.error('Ответ сервера не является словарем!')
         raise TypeError('Ответ сервера не является словарем!')
-    print(homeworks[0])
+    if not (isinstance(homeworks, list)):
+        raise TypeError('Домашка с сервера не является списком!')
     return homeworks
 
 
@@ -105,8 +138,8 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     if not check_tokens():
-        print('error token!')
-        return False
+        logger.critical("TOKEN error!")
+        raise ExceptionTokenError('С токенами что-то не так!')
 
     while True:
         try:
