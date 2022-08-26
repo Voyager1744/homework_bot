@@ -14,7 +14,7 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 600
+RETRY_TIME = 6
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -59,18 +59,22 @@ class ExceptionResponseError(Exception):
 
 class ExceptionTokenError(Exception):
     """Ошибка передачи токена."""
-    # logger.critical("TOKEN error!")
+
+
+class ExceptionNonInspectedError(Exception):
+    """Прочие ошибки."""
 
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-    try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        return 'Сообщение отправлено телеграмм'
-    except telegram.TelegramError as telegram_error:
-        return f'Произошла ошибка {telegram_error}!'
-    except ExceptionTelegram:
-        return 'Сообщение не отправилось. Что-то пошло не так'
+    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    # try:
+    #     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    #     return 'Сообщение отправлено телеграмм'
+    # except telegram.TelegramError as telegram_error:
+    #     return f'Произошла ошибка {telegram_error}!'
+    # except ExceptionTelegram:
+    #     return 'Сообщение не отправилось. Что-то пошло не так'
 
 
 def get_api_answer(current_timestamp):
@@ -80,6 +84,7 @@ def get_api_answer(current_timestamp):
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != 200:
+            logger.error('Answer not 200')
             raise ExceptionNot200Error('Answer not 200')
         return response.json()
     except requests.exceptions.RequestException as request_error:
@@ -100,9 +105,10 @@ def check_response(response):
     if response.get('homeworks') is None:
         raise ExceptionResponseError('Response Error!')
     if not (isinstance(response, dict)):
-        # logger.error('Ответ сервера не является словарем!')
+        logger.error('Ответ сервера не является словарем!')
         raise TypeError('Ответ сервера не является словарем!')
     if not (isinstance(homeworks, list)):
+        logger.error('Домашка с сервера не является списком!')
         raise TypeError('Домашка с сервера не является списком!')
     return homeworks
 
@@ -121,7 +127,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """Проверяет доступность переменных окружения,
+    """Проверяет доступность переменных окружения
     которые необходимы для работы программы.
     """
     check = True
@@ -137,15 +143,37 @@ def check_tokens():
 
 def main():
     """Основная логика работы бота."""
-    if not check_tokens():
-        logger.critical("TOKEN error!")
-        raise ExceptionTokenError('С токенами что-то не так!')
+    try:
+        logger.debug('start check tokens:')
+        check_tokens()
+        if not check_tokens():
+            logger.critical('Tokens is not found!')
+            raise ExceptionTokenError
+            exit()
+        logger.debug('tokens correct!')
+        
+    except ExceptionNonInspectedError:
+        logger.critical('Other error with token!')
 
+    message_repeat = ''
+    
     while True:
+        
         try:
             bot = telegram.Bot(token=TELEGRAM_TOKEN)
             current_timestamp = (int(time.time())) - MONTH_IN_SEC
-            response = get_api_answer(current_timestamp)
+            try:
+                logger.debug('start get_api_answer')
+                response = get_api_answer(current_timestamp)
+                logger.debug('get_api_answer is good.')
+            except Exception:
+                logger.error('Error API answer!')
+                message = 'Адрес Практикума недоступен!'
+                if message != message_repeat:
+                    message_repeat = message
+                    send_message(bot, message)
+                    logger.info(f'Message {message} send to Telegram.')
+                raise    
             homeworks = check_response(response)
             homework = homeworks[0]
             message = parse_status(homework)
