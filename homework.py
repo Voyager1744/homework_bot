@@ -1,3 +1,4 @@
+"""Бот для проверки домашки."""
 import os
 import sys
 import time
@@ -14,7 +15,7 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 6
+RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -26,7 +27,7 @@ HOMEWORK_STATUSES = {
 MONTH_IN_SEC = 2629743
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     stream=sys.stdout,
     filemode='w',
     format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
@@ -44,17 +45,14 @@ logger.addHandler(fileHandler)
 
 class ExceptionNot200Error(Exception):
     """Запрос не вернул ответ с кодом 200."""
-    # logger.error("Answer ERROR not 200!")
 
 
 class ExceptionTelegram(Exception):
     """Сообщение не отправилось в чат."""
-    # logger.error("Message not send!")
 
 
 class ExceptionResponseError(Exception):
     """Ошибка отклика."""
-    # logger.error("Response ERROR!")
 
 
 class ExceptionTokenError(Exception):
@@ -68,13 +66,6 @@ class ExceptionNonInspectedError(Exception):
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-    # try:
-    #     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-    #     return 'Сообщение отправлено телеграмм'
-    # except telegram.TelegramError as telegram_error:
-    #     return f'Произошла ошибка {telegram_error}!'
-    # except ExceptionTelegram:
-    #     return 'Сообщение не отправилось. Что-то пошло не так'
 
 
 def get_api_answer(current_timestamp):
@@ -148,20 +139,24 @@ def main():
         check_tokens()
         if not check_tokens():
             logger.critical('Tokens is not found!')
-            raise ExceptionTokenError
-            exit()
+            sys.exit(1)
         logger.debug('tokens correct!')
-        
-    except ExceptionNonInspectedError:
+
+    except ExceptionTokenError:
         logger.critical('Other error with token!')
 
     message_repeat = ''
-    
+
     while True:
-        
         try:
             bot = telegram.Bot(token=TELEGRAM_TOKEN)
             current_timestamp = (int(time.time())) - MONTH_IN_SEC
+            try:
+                message = 'Бот начал работу.'
+                send_message(bot, message)
+                logger.info(f'Message {message} send to Telegram.')
+            except telegram.TelegramError:
+                logger.error('Error send message to Telegram!')
             try:
                 logger.debug('start get_api_answer')
                 response = get_api_answer(current_timestamp)
@@ -171,13 +166,39 @@ def main():
                 message = 'Адрес Практикума недоступен!'
                 if message != message_repeat:
                     message_repeat = message
-                    send_message(bot, message)
-                    logger.info(f'Message {message} send to Telegram.')
-                raise    
-            homeworks = check_response(response)
+                    try:
+                        send_message(bot, message)
+                        logger.info(f'Message {message} send to Telegram.')
+                    except telegram.TelegramError:
+                        logger.error('Error send message to Telegram!')
+                raise
+            try:
+                homeworks = check_response(response)
+            except Exception:
+                logger.error('Error check_response!')
+                message = 'Домашка не найдена или с ней проблемы!'
+                if message != message_repeat:
+                    message_repeat = message
+                    try:
+                        send_message(bot, message)
+                        logger.info(f'Message {message} send to Telegram.')
+                    except telegram.TelegramError:
+                        logger.error('Error send message to Telegram!')
+                raise
             homework = homeworks[0]
-            message = parse_status(homework)
-            send_message(bot, message)
+            try:
+                message = parse_status(homework)
+            except ValueError:
+                logger.error('Error value in parse_status!')
+                raise
+            except ExceptionNonInspectedError:
+                logger.error('Other Error in parse_status!')
+                raise
+            try:
+                send_message(bot, message)
+                logger.info(f'Message {message} send to Telegram.')
+            except telegram.TelegramError:
+                logger.error('Error send message to Telegram!')
 
             time.sleep(RETRY_TIME)
 
@@ -185,8 +206,6 @@ def main():
             message = f'Сбой в работе программы: {error}'
             print(message)
             time.sleep(RETRY_TIME)
-        else:
-            ...
 
 
 if __name__ == '__main__':
