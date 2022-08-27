@@ -33,37 +33,38 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
 )
 logger = logging.getLogger(__name__)
-fileHandler = logging.FileHandler('program_hw.log')
 streamHandler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 streamHandler.setFormatter(formatter)
-fileHandler.setFormatter(formatter)
 logger.addHandler(streamHandler)
-logger.addHandler(fileHandler)
 
 
-class ExceptionNot200Error(Exception):
+class BotException(Exception):
+    """Ошибки бота."""
+
+
+class ExceptionNot200Error(BotException):
     """Запрос не вернул ответ с кодом 200."""
 
 
-class ExceptionTelegram(Exception):
+class ExceptionTelegram(BotException):
     """Сообщение не отправилось в чат."""
 
 
-class ExceptionResponseError(Exception):
+class ExceptionResponseError(BotException):
     """Ошибка отклика."""
 
 
-class ExceptionTokenError(Exception):
+class ExceptionTokenError(BotException):
     """Ошибка передачи токена."""
 
 
-class ExceptionListEmpty(Exception):
+class ExceptionListEmpty(BotException):
     """Ошибка списка домашних работ."""
 
 
-class ExceptionNonInspectedError(Exception):
+class ExceptionNonInspectedError(BotException):
     """Прочие ошибки."""
 
 
@@ -83,11 +84,12 @@ def get_api_answer(current_timestamp):
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != 200:
             logger.error('Answer not 200')
-            raise ExceptionNot200Error('Answer not 200')
+            message = 'Answer not 200'
+            raise ExceptionNot200Error(message)
         return response.json()
     except requests.exceptions.RequestException as request_error:
-        code_api_msg = f'Код ответа API (RequestException): {request_error}'
-        raise Exception(code_api_msg)
+        message = f'Код ответа API (RequestException): {request_error}'
+        raise ExceptionNonInspectedError(message)
 
 
 def check_response(response):
@@ -101,15 +103,19 @@ def check_response(response):
     """
     homeworks = response['homeworks']
     if response.get('homeworks') is None:
-        raise ExceptionResponseError('Response Error!')
+        message = 'Response Error!'
+        raise ExceptionResponseError(message)
     if not (isinstance(response, dict)):
-        logger.error('Ответ сервера не является словарем!')
-        raise TypeError('Ответ сервера не является словарем!')
+        message = 'Ответ сервера не является словарем!'
+        logger.error(message)
+        raise TypeError(message)
     if not (isinstance(homeworks, list)):
-        logger.error('Домашка с сервера не является списком!')
-        raise TypeError('Домашка с сервера не является списком!')
+        message = 'Домашка с сервера не является списком!'
+        logger.error(message)
+        raise TypeError(message)
     if not homeworks:
-        raise ExceptionListEmpty('Список домашних работ пуст!')
+        message = 'Список домашних работ пуст!'
+        raise ExceptionListEmpty(message)
     return homeworks
 
 
@@ -171,32 +177,16 @@ def main():
 
             send_message(bot, message)
 
-        except ExceptionTelegram:
-            logger.error('Error send message to Telegram!')
-
-        except ExceptionNot200Error:
-            logger.error('Error API answer!')
-            message = 'Адрес Практикума недоступен!'
-            if message != last_message:
-                send_message(bot, message)
-                last_message = message
-
-        except ExceptionResponseError:
-            logger.error('Error Response!')
-
-        except TypeError as e:
-            logger.error(f'Error {e}!!!')
-
         except ExceptionListEmpty as e:
-            logger.error(f'Error {e}!!!')
+            logger.info(str(e))
 
-        except Exception as error:
-            message = f'Сбой в работе программы: {error}'
-            logger.error(f'Error: {message}!!!')
+        except BotException as error:
+            message = f'Ошибка в программе: {str(error)}'
+            print(message)
+            logger.exception(f'Error: {message}!!!')
             if message != last_message:
                 send_message(bot, message)
                 last_message = message
-
         time.sleep(RETRY_TIME)
 
 
