@@ -193,9 +193,9 @@ def main():
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(f'Error: {message}!!!')
-            # if message != last_message:
-            #     send_message(bot, message)
-            #     last_message = message
+            if message != last_message:
+                send_message(bot, message)
+                last_message = message
 
         time.sleep(RETRY_TIME)
 
