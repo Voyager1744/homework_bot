@@ -114,8 +114,8 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """
-    Извлекает из информации о конкретной домашней работе статус этой работы.
+    """Извлекает из информации о конкретной.
+    домашней работе статус этой работы.
     """
     homework_name = homework['homework_name']
     homework_status = homework['status']
@@ -127,7 +127,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """Проверяет доступность переменных окружения
+    """Проверяет доступность переменных окружения.
     которые необходимы для работы программы.
     """
     check = True
@@ -193,9 +193,9 @@ def main():
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(f'Error: {message}!!!')
-            if message != last_message:
-                send_message(bot, message)
-                last_message = message
+            # if message != last_message:
+            #     send_message(bot, message)
+            #     last_message = message
 
         time.sleep(RETRY_TIME)
 
