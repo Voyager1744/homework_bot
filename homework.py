@@ -59,13 +59,20 @@ class ExceptionTokenError(Exception):
     """Ошибка передачи токена."""
 
 
+class ExceptionListEmpty(Exception):
+    """Ошибка списка домашних работ."""
+
+
 class ExceptionNonInspectedError(Exception):
     """Прочие ошибки."""
 
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    try:
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except telegram.TelegramError:
+        raise ExceptionTelegram
 
 
 def get_api_answer(current_timestamp):
@@ -101,6 +108,8 @@ def check_response(response):
     if not (isinstance(homeworks, list)):
         logger.error('Домашка с сервера не является списком!')
         raise TypeError('Домашка с сервера не является списком!')
+    if not homeworks:
+        raise ExceptionListEmpty('Список домашних работ пуст!')
     return homeworks
 
 
@@ -145,67 +154,50 @@ def main():
     except ExceptionTokenError:
         logger.critical('Other error with token!')
 
-    message_repeat = ''
+    last_message = ''
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
     while True:
         try:
-            bot = telegram.Bot(token=TELEGRAM_TOKEN)
-            current_timestamp = (int(time.time())) - MONTH_IN_SEC
-            try:
-                message = 'Бот начал работу.'
-                send_message(bot, message)
-                logger.info(f'Message {message} send to Telegram.')
-            except telegram.TelegramError:
-                logger.error('Error send message to Telegram!')
-            try:
-                logger.debug('start get_api_answer')
-                response = get_api_answer(current_timestamp)
-                logger.debug('get_api_answer is good.')
-            except Exception:
-                logger.error('Error API answer!')
-                message = 'Адрес Практикума недоступен!'
-                if message != message_repeat:
-                    message_repeat = message
-                    try:
-                        send_message(bot, message)
-                        logger.info(f'Message {message} send to Telegram.')
-                    except telegram.TelegramError:
-                        logger.error('Error send message to Telegram!')
-                raise
-            try:
-                homeworks = check_response(response)
-            except Exception:
-                logger.error('Error check_response!')
-                message = 'Домашка не найдена или с ней проблемы!'
-                if message != message_repeat:
-                    message_repeat = message
-                    try:
-                        send_message(bot, message)
-                        logger.info(f'Message {message} send to Telegram.')
-                    except telegram.TelegramError:
-                        logger.error('Error send message to Telegram!')
-                raise
-            homework = homeworks[0]
-            try:
-                message = parse_status(homework)
-            except ValueError:
-                logger.error('Error value in parse_status!')
-                raise
-            except ExceptionNonInspectedError:
-                logger.error('Other Error in parse_status!')
-                raise
-            try:
-                send_message(bot, message)
-                logger.info(f'Message {message} send to Telegram.')
-            except telegram.TelegramError:
-                logger.error('Error send message to Telegram!')
+            current_timestamp = int(time.time())
 
-            time.sleep(RETRY_TIME)
+            logger.debug('start get_api_answer')
+            response = get_api_answer(current_timestamp)
+            logger.debug('get_api_answer is good.')
+
+            homeworks = check_response(response)
+            homework = homeworks[0]
+            message = parse_status(homework)
+
+            send_message(bot, message)
+
+        except ExceptionTelegram:
+            logger.error('Error send message to Telegram!')
+
+        except ExceptionNot200Error:
+            logger.error('Error API answer!')
+            message = 'Адрес Практикума недоступен!'
+            if message != last_message:
+                send_message(bot, message)
+                last_message = message
+
+        except ExceptionResponseError:
+            logger.error('Error Response!')
+
+        except TypeError as e:
+            logger.error(f'Error {e}!!!')
+
+        except ExceptionListEmpty as e:
+            logger.error(f'Error {e}!!!')
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            print(message)
-            time.sleep(RETRY_TIME)
+            logger.error(f'Error: {message}!!!')
+            if message != last_message:
+                send_message(bot, message)
+                last_message = message
+
+        time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
