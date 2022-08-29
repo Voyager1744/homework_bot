@@ -32,7 +32,7 @@ HOMEWORK_STATUSES = {
 MONTH_IN_SEC = 2629743
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
 )
 logger = logging.getLogger(__name__)
