@@ -3,11 +3,17 @@ import os
 import sys
 import time
 import logging
+from http import HTTPStatus
 
 import requests
 import telegram
 
 from dotenv import load_dotenv
+
+from exceptions import (BotException, ExceptionNot200Error, ExceptionTelegram,
+                        ExceptionResponseError, ExceptionTokenError,
+                        ExceptionListEmpty,
+                        ExceptionNonInspectedError)
 
 load_dotenv()
 
@@ -40,40 +46,16 @@ streamHandler.setFormatter(formatter)
 logger.addHandler(streamHandler)
 
 
-class BotException(Exception):
-    """Ошибки бота."""
-
-
-class ExceptionNot200Error(BotException):
-    """Запрос не вернул ответ с кодом 200."""
-
-
-class ExceptionTelegram(BotException):
-    """Сообщение не отправилось в чат."""
-
-
-class ExceptionResponseError(BotException):
-    """Ошибка отклика."""
-
-
-class ExceptionTokenError(BotException):
-    """Ошибка передачи токена."""
-
-
-class ExceptionListEmpty(BotException):
-    """Ошибка списка домашних работ."""
-
-
-class ExceptionNonInspectedError(BotException):
-    """Прочие ошибки."""
-
-
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     try:
+        logger.info('The bot started sending a message')
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.TelegramError:
+        logger.info('The bot failed to send the message!')
         raise ExceptionTelegram
+    else:
+        logger.info('The bot did a great job in sending the message!')
 
 
 def get_api_answer(current_timestamp):
@@ -81,15 +63,17 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
+        logger.info('Work has begun on the API request.')
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            logger.error('Answer not 200')
-            message = 'Answer not 200'
-            raise ExceptionNot200Error(message)
-        return response.json()
     except requests.exceptions.RequestException as request_error:
         message = f'Код ответа API (RequestException): {request_error}'
         raise ExceptionNonInspectedError(message)
+    else:
+        if response.status_code != HTTPStatus.OK:
+            message = 'The request page is unavailable! Repeat later!'
+            raise ExceptionNot200Error(message)
+        logger.info('Request completed successfully.')
+        return response.json()
 
 
 def check_response(response):
@@ -102,16 +86,22 @@ def check_response(response):
     доступный в ответе API по ключу 'homeworks'.
     """
     homeworks = response['homeworks']
-    if response.get('homeworks') is None:
-        message = 'Response Error!'
-        raise ExceptionResponseError(message)
+    # homeworks = response.get('homeworks')
+    # не проходят тесты.
     if not (isinstance(response, dict)):
         message = 'Ответ сервера не является словарем!'
-        logger.error(message)
         raise TypeError(message)
-    if not (isinstance(homeworks, list)):
+
+    if 'homeworks' not in response:
+        message = 'There is no "homework" key in the response'
+        raise ExceptionResponseError(message)
+
+    if homeworks is None:
+        message = 'Response Error!'
+        raise ExceptionResponseError(message)
+
+    if not isinstance(homeworks, list):
         message = 'Домашка с сервера не является списком!'
-        logger.error(message)
         raise TypeError(message)
     if not homeworks:
         message = 'Список домашних работ пуст!'
@@ -123,8 +113,8 @@ def parse_status(homework):
     """Извлекает из информации о конкретной.
     домашней работе статус этой работы.
     """
-    homework_name = homework['homework_name']
-    homework_status = homework['status']
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
 
     verdict = HOMEWORK_STATUSES[homework_status]
     print(f'Изменился статус проверки работы "{homework_name}". {verdict}')
@@ -165,7 +155,7 @@ def main():
 
     while True:
         try:
-            current_timestamp = int(time.time())
+            current_timestamp = int(time.time()) - MONTH_IN_SEC
 
             logger.debug('start get_api_answer')
             response = get_api_answer(current_timestamp)
