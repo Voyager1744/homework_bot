@@ -11,9 +11,8 @@ import telegram
 from dotenv import load_dotenv
 
 from exceptions import (BotException, ExceptionNot200Error, ExceptionTelegram,
-                        ExceptionResponseError, ExceptionTokenError,
-                        ExceptionListEmpty,
-                        ExceptionNonInspectedError)
+                        ExceptionResponseError, ExceptionListEmpty,
+                        ExceptionNonInspectedError, ExceptionStatusUnknown)
 
 load_dotenv()
 
@@ -33,17 +32,16 @@ HOMEWORK_STATUSES = {
 MONTH_IN_SEC = 2629743
 
 logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    filemode='w',
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s - %(name)s'
 )
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 streamHandler = logging.StreamHandler(sys.stdout)
+logger.addHandler(streamHandler)
 formatter = logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 streamHandler.setFormatter(formatter)
-logger.addHandler(streamHandler)
 
 
 def send_message(bot, message):
@@ -89,9 +87,7 @@ def check_response(response):
         message = 'Ответ сервера не является словарем!'
         raise TypeError(message)
 
-    # homeworks = response['homeworks']
     homeworks = response.get('homeworks')
-    # не проходят тесты.
 
     if 'homeworks' not in response:
         message = 'There is no "homework" key in the response'
@@ -114,12 +110,13 @@ def parse_status(homework):
     """Извлекает из информации о конкретной.
     домашней работе статус этой работы.
     """
-    homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
-
+    if homework_status not in HOMEWORK_STATUSES:
+        message = 'Status hw unknown!'
+        logger.error(message)
+        raise ExceptionStatusUnknown(message)
+    homework_name = homework.get('homework_name')
     verdict = HOMEWORK_STATUSES[homework_status]
-    print(f'Изменился статус проверки работы "{homework_name}". {verdict}')
-
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -127,29 +124,18 @@ def check_tokens():
     """Проверяет доступность переменных окружения.
     которые необходимы для работы программы.
     """
-    check = True
-    if PRACTICUM_TOKEN is None:
-        check = False
-    if TELEGRAM_TOKEN is None:
-        check = False
-    if TELEGRAM_CHAT_ID is None:
-        check = False
-
-    return check
+    return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
 def main():
     """Основная логика работы бота."""
-    try:
-        logger.debug('start check tokens:')
-        check_tokens()
-        if not check_tokens():
-            logger.critical('Tokens is not found!')
-            sys.exit(1)
-        logger.debug('tokens correct!')
-
-    except ExceptionTokenError:
-        logger.critical('Other error with token!')
+    logger.debug('start check tokens:')
+    check_tokens()
+    if not check_tokens():
+        logger.critical('Tokens is not found!')
+        message = 'The program has failed, there are no tokens!'
+        sys.exit(message)
+    logger.debug('tokens correct!')
 
     last_message = ''
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
@@ -158,7 +144,6 @@ def main():
         try:
             current_timestamp = int(time.time()) - MONTH_IN_SEC
 
-            logger.debug('start get_api_answer')
             response = get_api_answer(current_timestamp)
             logger.debug('get_api_answer is good.')
 
@@ -166,19 +151,21 @@ def main():
             homework = homeworks[0]
             message = parse_status(homework)
 
-            send_message(bot, message)
+            if message != last_message:
+                send_message(bot, message)
+                last_message = message
 
         except ExceptionListEmpty as e:
             logger.info(str(e))
 
         except BotException as error:
             message = f'Ошибка в программе: {str(error)}'
-            print(message)
             logger.exception(f'Error: {message}!!!')
             if message != last_message:
                 send_message(bot, message)
                 last_message = message
-        time.sleep(RETRY_TIME)
+        finally:
+            time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':

@@ -14,13 +14,12 @@ class ExceptionResponseError(BotException):
     """Ошибка отклика."""
 
 
-class ExceptionTokenError(BotException):
-    """Ошибка передачи токена."""
-
-
 class ExceptionListEmpty(BotException):
     """Ошибка списка домашних работ."""
 
+
+class ExceptionStatusUnknown(KeyError):
+    """Неизвестный статус домашней работы."""
 
 class ExceptionNonInspectedError(BotException):
     """Прочие ошибки."""
