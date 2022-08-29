@@ -29,7 +29,6 @@ HOMEWORK_STATUSES = {
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
-MONTH_IN_SEC = 2629743
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,7 +49,6 @@ def send_message(bot, message):
         logger.info('The bot started sending a message')
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except telegram.TelegramError:
-        logger.info('The bot failed to send the message!')
         raise ExceptionTelegram
     else:
         logger.info('The bot did a great job in sending the message!')
@@ -66,12 +64,11 @@ def get_api_answer(current_timestamp):
     except requests.exceptions.RequestException as request_error:
         message = f'Код ответа API (RequestException): {request_error}'
         raise ExceptionNonInspectedError(message)
-    else:
-        if response.status_code != HTTPStatus.OK:
-            message = 'The request page is unavailable! Repeat later!'
-            raise ExceptionNot200Error(message)
-        logger.info('Request completed successfully.')
-        return response.json()
+    if response.status_code != HTTPStatus.OK:
+        message = 'The request page is unavailable! Repeat later!'
+        raise ExceptionNot200Error(message)
+    logger.info('Request completed successfully.')
+    return response.json()
 
 
 def check_response(response):
@@ -93,16 +90,10 @@ def check_response(response):
         message = 'There is no "homework" key in the response'
         raise ExceptionResponseError(message)
 
-    if homeworks is None:
-        message = 'Response Error!'
-        raise ExceptionResponseError(message)
-
     if not isinstance(homeworks, list):
         message = 'Домашка с сервера не является списком!'
         raise TypeError(message)
-    if not homeworks:
-        message = 'Список домашних работ пуст!'
-        raise ExceptionListEmpty(message)
+
     return homeworks
 
 
@@ -113,9 +104,11 @@ def parse_status(homework):
     homework_status = homework.get('status')
     if homework_status not in HOMEWORK_STATUSES:
         message = 'Status hw unknown!'
-        logger.error(message)
         raise ExceptionStatusUnknown(message)
     homework_name = homework.get('homework_name')
+    if 'homework_name' not in homework:
+        message = 'Homework unknown!'
+        raise ExceptionStatusUnknown(message)
     verdict = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -130,7 +123,6 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     logger.debug('start check tokens:')
-    check_tokens()
     if not check_tokens():
         logger.critical('Tokens is not found!')
         message = 'The program has failed, there are no tokens!'
@@ -148,6 +140,10 @@ def main():
             logger.debug('get_api_answer is good.')
 
             homeworks = check_response(response)
+            if homeworks:
+                message = parse_status(homeworks[0])
+            else:
+                logger.info('Список работ пустой')
             homework = homeworks[0]
             message = parse_status(homework)
 
