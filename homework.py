@@ -122,6 +122,7 @@ def check_tokens():
 
 def main():
     """Основная логика работы бота."""
+    message = ''
     logger.debug('start check tokens:')
     if not check_tokens():
         logger.critical('Tokens is not found!')
@@ -144,8 +145,6 @@ def main():
                 message = parse_status(homeworks[0])
             else:
                 logger.info('Список работ пустой')
-            homework = homeworks[0]
-            message = parse_status(homework)
 
             if message != last_message:
                 send_message(bot, message)
