@@ -85,12 +85,13 @@ def check_response(response):
     домашних работ (он может быть и пустым),
     доступный в ответе API по ключу 'homeworks'.
     """
-    homeworks = response['homeworks']
-    # homeworks = response.get('homeworks')
-    # не проходят тесты.
     if not (isinstance(response, dict)):
         message = 'Ответ сервера не является словарем!'
         raise TypeError(message)
+
+    # homeworks = response['homeworks']
+    homeworks = response.get('homeworks')
+    # не проходят тесты.
 
     if 'homeworks' not in response:
         message = 'There is no "homework" key in the response'
