@@ -142,7 +142,7 @@ def main():
 
     while True:
         try:
-            current_timestamp = int(time.time()) - MONTH_IN_SEC
+            current_timestamp = int(time.time()) - RETRY_TIME
 
             response = get_api_answer(current_timestamp)
             logger.debug('get_api_answer is good.')
